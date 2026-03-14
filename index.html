@@ -1,0 +1,737 @@
+
+CI/CD Pipeline (GitHub → Jenkins → Docker → EC2)
+
+10:09
+
+
+Here's the full CI/CD pipeline broken down by phase. Click any node to dive deeper.
+
+Source — A developer pushes code or opens a pull request on GitHub. A configured webhook fires an HTTP POST to Jenkins, kicking off the pipeline automatically.
+
+Build & Test (Jenkins) — Jenkins orchestrates three sequential stages: Checkout (clones the repo), Build (compiles, lints, installs dependencies), and Test (unit and integration tests). If any stage fails, the pipeline short-circuits and sends a notification — shown by the red dashed failure path looping back.
+
+Package (Docker) — On a clean test pass, Jenkins runs docker build using your Dockerfile to produce an image, then pushes it to a registry (Docker Hub, ECR, or a private registry). The image is tagged with the commit SHA or build number for traceability.
+
+Deploy (EC2) — Jenkins SSHs into the target EC2 instance (or uses SSM/Ansible), pulls the new image from the registry, and runs it via docker run or docker-compose up. The app is now live.
+
+A few things worth knowing about this pattern:
+
+Jenkinsfile lives in the repo itself (pipeline as code), so the pipeline definition is version-controlled alongside the application.
+IAM roles on EC2 should grant the instance permission to pull from ECR — avoid baking credentials into the instance or the image.
+For zero-downtime deploys, you can add a blue/green or rolling-update step between "pull" and "run" — worth adding once the basic pipeline is stable.
+bike simple staics website using html , css and javascript in single file , and dockerfile
+
+10:11
+
+Created 2 files, viewed a file, read a file
+Created 2 files, viewed a file, read a file
+Here's your VELO bike website + Dockerfile. Both files are ready to download.
+
+What's in the site:
+
+Fixed nav with scroll-aware styling and underline hover effects
+Hero with an animated inline SVG bicycle (spinning wheels)
+Three bike model cards (Road / Gravel / Urban) with hover interactions
+Engineering features section with scroll-reveal animations
+Specs table, auto-rotating testimonials, and a full CTA section
+Custom cursor, smooth scroll, IntersectionObserver-based reveal — all vanilla JS, zero dependencies
+To build and run with Docker:
+
+bash
+# Build the image
+docker build -t velo-bike .
+
+# Run locally on port 8080
+docker run -p 8080:80 velo-bike
+Then open http://localhost:8080.
+
+To deploy to EC2 (continuing from your CI/CD pipeline):
+
+bash
+# Tag for your registry (e.g. ECR)
+docker tag velo-bike 123456789.dkr.ecr.eu-west-1.amazonaws.com/velo-bike:latest
+
+# Push
+docker push 123456789.dkr.ecr.eu-west-1.amazonaws.com/velo-bike:latest
+
+# On EC2
+docker pull 123456789.dkr.ecr.eu-west-1.amazonaws.com/velo-bike:latest
+docker run -d -p 80:80 --name velo velo-bike
+The Dockerfile uses a two-stage build (Node → nginx alpine) so the final image is under ~50MB, with gzip compression and proper cache headers baked in.
+
+Index
+Code · HTML 
+Dockerfile
+ 
+
+
+
+
+
+Claude is AI and can make mistakes. Please double-check responses.
+Index · HTML
+Copy
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VELO — Ride Further</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+  :root {
+    --ink: #0a0a0a;
+    --chalk: #f5f2ec;
+    --rust: #c84b2f;
+    --rust-dark: #9e3720;
+    --sand: #e8e2d5;
+    --muted: #7a7268;
+    --ff-display: 'Bebas Neue', sans-serif;
+    --ff-body: 'DM Sans', sans-serif;
+  }
+ 
+  html { scroll-behavior: smooth; }
+ 
+  body {
+    font-family: var(--ff-body);
+    background: var(--chalk);
+    color: var(--ink);
+    overflow-x: hidden;
+    cursor: none;
+  }
+ 
+  /* ── Custom cursor ── */
+  #cursor {
+    position: fixed; top: 0; left: 0; z-index: 9999;
+    width: 14px; height: 14px;
+    background: var(--rust);
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: transform 0.12s ease, width 0.2s ease, height 0.2s ease, background 0.2s ease;
+    mix-blend-mode: multiply;
+  }
+  #cursor.hover { width: 36px; height: 36px; background: var(--rust); opacity: 0.4; }
+ 
+  /* ── Nav ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.4rem 3rem;
+    mix-blend-mode: multiply;
+    transition: background 0.3s;
+  }
+  nav.scrolled {
+    background: var(--chalk);
+    mix-blend-mode: normal;
+    border-bottom: 1px solid var(--sand);
+  }
+  .nav-logo {
+    font-family: var(--ff-display);
+    font-size: 2rem;
+    letter-spacing: 0.1em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .nav-links { display: flex; gap: 2.4rem; list-style: none; }
+  .nav-links a {
+    text-decoration: none; color: var(--ink);
+    font-size: 0.82rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+    position: relative; padding-bottom: 2px;
+  }
+  .nav-links a::after {
+    content: ''; position: absolute; bottom: 0; left: 0;
+    width: 0; height: 1.5px; background: var(--rust);
+    transition: width 0.25s ease;
+  }
+  .nav-links a:hover::after { width: 100%; }
+ 
+  .nav-cta {
+    font-size: 0.78rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.6rem 1.4rem; border: 1.5px solid var(--ink);
+    background: transparent; color: var(--ink);
+    cursor: none; transition: background 0.2s, color 0.2s;
+    text-decoration: none;
+  }
+  .nav-cta:hover { background: var(--ink); color: var(--chalk); }
+ 
+  /* ── Hero ── */
+  #hero {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+  .hero-text {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 8rem 4rem 4rem 6rem;
+    position: relative; z-index: 2;
+  }
+  .hero-eyebrow {
+    font-size: 0.78rem; font-weight: 500; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--rust); margin-bottom: 1.2rem;
+    opacity: 0; animation: fadeUp 0.8s 0.2s forwards;
+  }
+  .hero-title {
+    font-family: var(--ff-display);
+    font-size: clamp(5rem, 9vw, 10rem);
+    line-height: 0.92;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    opacity: 0; animation: fadeUp 0.9s 0.35s forwards;
+  }
+  .hero-title span { color: var(--rust); }
+  .hero-desc {
+    margin-top: 2rem; max-width: 380px;
+    font-size: 1rem; font-weight: 300; line-height: 1.8; color: var(--muted);
+    opacity: 0; animation: fadeUp 0.9s 0.5s forwards;
+  }
+  .hero-actions {
+    display: flex; gap: 1.2rem; align-items: center; margin-top: 2.8rem;
+    opacity: 0; animation: fadeUp 0.9s 0.65s forwards;
+  }
+  .btn-primary {
+    padding: 1rem 2.4rem;
+    background: var(--rust); color: #fff;
+    font-family: var(--ff-body); font-size: 0.82rem;
+    font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+    border: none; cursor: none; text-decoration: none;
+    transition: background 0.2s, transform 0.15s;
+    display: inline-block;
+  }
+  .btn-primary:hover { background: var(--rust-dark); transform: translateY(-2px); }
+  .btn-ghost {
+    font-size: 0.82rem; font-weight: 400; letter-spacing: 0.06em;
+    color: var(--muted); text-decoration: none;
+    display: flex; align-items: center; gap: 0.5rem;
+    transition: color 0.2s;
+  }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-ghost span { font-size: 1.1rem; }
+ 
+  .hero-visual {
+    position: relative; overflow: hidden; background: var(--sand);
+  }
+  .hero-visual svg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; animation: fadeIn 1.2s 0.8s forwards;
+  }
+ 
+  /* Bike SVG illustration */
+  .bike-wheel {
+    transform-box: fill-box; transform-origin: center;
+    animation: spin 6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+ 
+  .hero-tag {
+    position: absolute; bottom: 2rem; right: 2rem;
+    font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--muted); writing-mode: vertical-rl; opacity: 0.5;
+  }
+ 
+  /* ── Section base ── */
+  section { padding: 7rem 6rem; }
+  .section-label {
+    font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--rust); margin-bottom: 1rem; font-weight: 500;
+  }
+  .section-title {
+    font-family: var(--ff-display);
+    font-size: clamp(3rem, 5vw, 5.5rem);
+    line-height: 0.95; letter-spacing: 0.02em;
+  }
+ 
+  /* ── Models ── */
+  #models { background: var(--ink); color: var(--chalk); }
+  #models .section-label { color: var(--rust); }
+  .models-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 4rem; }
+  .models-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #222; }
+  .model-card {
+    background: #111; padding: 2.5rem; cursor: none;
+    transition: background 0.25s; position: relative; overflow: hidden;
+  }
+  .model-card::before {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: var(--rust);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.3s ease;
+  }
+  .model-card:hover { background: #161616; }
+  .model-card:hover::before { transform: scaleX(1); }
+  .model-tag {
+    display: inline-block; font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 0.25rem 0.6rem; background: var(--rust);
+    color: #fff; font-weight: 500; margin-bottom: 1.5rem;
+  }
+  .model-icon { width: 100%; height: 140px; margin-bottom: 1.5rem; }
+  .model-name {
+    font-family: var(--ff-display); font-size: 2.6rem;
+    letter-spacing: 0.04em; margin-bottom: 0.8rem;
+  }
+  .model-desc { font-size: 0.88rem; font-weight: 300; color: #888; line-height: 1.7; margin-bottom: 1.5rem; }
+  .model-price {
+    font-family: var(--ff-display); font-size: 1.8rem; color: var(--rust);
+  }
+ 
+  /* ── Features ── */
+  #features { background: var(--chalk); }
+  .features-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5rem; align-items: center; margin-top: 4rem; }
+  .feature-visual {
+    aspect-ratio: 1; background: var(--sand);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .feature-visual svg { width: 70%; height: 70%; }
+  .feature-list { display: flex; flex-direction: column; gap: 2rem; }
+  .feature-item { display: flex; gap: 1.5rem; padding-bottom: 2rem; border-bottom: 1px solid var(--sand); }
+  .feature-item:last-child { border-bottom: none; }
+  .feature-num {
+    font-family: var(--ff-display); font-size: 3rem; color: var(--sand);
+    line-height: 1; flex-shrink: 0; width: 3rem;
+    transition: color 0.3s;
+  }
+  .feature-item:hover .feature-num { color: var(--rust); }
+  .feature-name {
+    font-weight: 500; font-size: 1.05rem; margin-bottom: 0.4rem; letter-spacing: 0.02em;
+  }
+  .feature-text { font-size: 0.88rem; color: var(--muted); line-height: 1.7; font-weight: 300; }
+ 
+  /* ── Specs ── */
+  #specs { background: var(--sand); }
+  .specs-table { margin-top: 3rem; width: 100%; border-collapse: collapse; }
+  .specs-table tr { border-bottom: 1px solid #d0c9bc; }
+  .specs-table tr:last-child { border-bottom: none; }
+  .specs-table td { padding: 1.1rem 0; font-size: 0.92rem; }
+  .specs-table td:first-child { color: var(--muted); font-weight: 300; width: 40%; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .specs-table td:last-child { font-weight: 500; }
+ 
+  /* ── Testimonials ── */
+  #testimonials { background: var(--rust); color: #fff; text-align: center; padding: 6rem; }
+  .testimonial-quote {
+    font-size: clamp(1.4rem, 3vw, 2.4rem);
+    font-weight: 300; line-height: 1.6; max-width: 780px; margin: 2rem auto;
+    font-style: italic;
+  }
+  .testimonial-author { font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; margin-top: 1.5rem; }
+  .testimonial-dots { display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: none; transition: background 0.2s; }
+  .dot.active { background: #fff; }
+ 
+  /* ── CTA ── */
+  #cta { background: var(--ink); color: var(--chalk); text-align: center; padding: 8rem 6rem; }
+  #cta .section-title { font-size: clamp(3.5rem, 7vw, 8rem); margin-bottom: 2rem; }
+  #cta .section-title span { color: var(--rust); }
+  #cta p { color: #888; font-weight: 300; font-size: 1rem; margin-bottom: 3rem; }
+ 
+  /* ── Footer ── */
+  footer {
+    background: #060606; color: #444; padding: 3rem 6rem;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; letter-spacing: 0.08em;
+  }
+  footer .logo { font-family: var(--ff-display); font-size: 1.6rem; color: #222; }
+  footer nav a { color: #444; text-decoration: none; margin-left: 1.5rem; transition: color 0.2s; }
+  footer nav a:hover { color: #888; }
+ 
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+ 
+  .reveal {
+    opacity: 0; transform: translateY(32px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+ 
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    #hero { grid-template-columns: 1fr; }
+    .hero-visual { display: none; }
+    .hero-text { padding: 7rem 2rem 4rem; }
+    section { padding: 5rem 2rem; }
+    .models-grid { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+    nav { padding: 1rem 1.5rem; }
+    .nav-links { display: none; }
+    footer { flex-direction: column; gap: 1.5rem; text-align: center; }
+    footer nav a { margin: 0 0.75rem; }
+  }
+</style>
+</head>
+<body>
+ 
+<!-- Cursor -->
+<div id="cursor"></div>
+ 
+<!-- Nav -->
+<nav id="navbar">
+  <a class="nav-logo" href="#">VELO</a>
+  <ul class="nav-links">
+    <li><a href="#models">Models</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#specs">Specs</a></li>
+    <li><a href="#testimonials">Stories</a></li>
+  </ul>
+  <a href="#cta" class="nav-cta">Build Yours</a>
+</nav>
+ 
+<!-- Hero -->
+<section id="hero">
+  <div class="hero-text">
+    <p class="hero-eyebrow">Season 2025 Collection</p>
+    <h1 class="hero-title">RIDE<br><span>FURTHER.</span></h1>
+    <p class="hero-desc">Precision-engineered frames, obsessively tuned components. Built for riders who refuse to compromise between speed, comfort, and soul.</p>
+    <div class="hero-actions">
+      <a href="#models" class="btn-primary">Explore Models</a>
+      <a href="#features" class="btn-ghost"><span>↓</span> See What's Inside</a>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <!-- Inline bike SVG illustration -->
+    <svg viewBox="0 0 500 380" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+      <!-- Rear wheel -->
+      <g class="bike-wheel">
+        <circle cx="150" cy="240" r="95" stroke="#0a0a0a" stroke-width="10"/>
+        <circle cx="150" cy="240" r="10" fill="#c84b2f"/>
+        <!-- Spokes -->
+        <line x1="150" y1="145" x2="150" y2="335" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="55" y1="240" x2="245" y2="240" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="83" y1="173" x2="217" y2="307" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="217" y1="173" x2="83" y2="307" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="150" y1="145" x2="245" y2="240" stroke="#0a0a0a" stroke-width="1.5" opacity="0.3"/>
+        <line x1="245" y1="240" x2="150" y2="335" stroke="#0a0a0a" stroke-width="1.5" opacity="0.3"/>
+        <line x1="150" y1="335" x2="55" y2="240" stroke="#0a0a0a" stroke-width="1.5" opacity="0.3"/>
+        <line x1="55" y1="240" x2="150" y2="145" stroke="#0a0a0a" stroke-width="1.5" opacity="0.3"/>
+        <circle cx="150" cy="240" r="70" stroke="#0a0a0a" stroke-width="1.5" opacity="0.12"/>
+      </g>
+      <!-- Front wheel -->
+      <g class="bike-wheel">
+        <circle cx="360" cy="240" r="95" stroke="#0a0a0a" stroke-width="10"/>
+        <circle cx="360" cy="240" r="10" fill="#c84b2f"/>
+        <line x1="360" y1="145" x2="360" y2="335" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="265" y1="240" x2="455" y2="240" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="293" y1="173" x2="427" y2="307" stroke="#0a0a0a" stroke-width="2.5"/>
+        <line x1="427" y1="173" x2="293" y2="307" stroke="#0a0a0a" stroke-width="2.5"/>
+        <circle cx="360" cy="240" r="70" stroke="#0a0a0a" stroke-width="1.5" opacity="0.12"/>
+      </g>
+      <!-- Frame -->
+      <!-- Chain stay -->
+      <line x1="150" y1="240" x2="255" y2="195" stroke="#0a0a0a" stroke-width="10" stroke-linecap="round"/>
+      <!-- Seat stay -->
+      <line x1="150" y1="240" x2="230" y2="120" stroke="#0a0a0a" stroke-width="7" stroke-linecap="round"/>
+      <!-- Top tube -->
+      <line x1="230" y1="120" x2="310" y2="115" stroke="#c84b2f" stroke-width="9" stroke-linecap="round"/>
+      <!-- Down tube -->
+      <line x1="310" y1="115" x2="255" y2="195" stroke="#0a0a0a" stroke-width="11" stroke-linecap="round"/>
+      <!-- Seat tube -->
+      <line x1="255" y1="195" x2="230" y2="120" stroke="#0a0a0a" stroke-width="9" stroke-linecap="round"/>
+      <!-- Fork -->
+      <line x1="310" y1="115" x2="360" y2="240" stroke="#0a0a0a" stroke-width="8" stroke-linecap="round"/>
+      <!-- Head tube -->
+      <line x1="305" y1="105" x2="318" y2="130" stroke="#c84b2f" stroke-width="14" stroke-linecap="round"/>
+      <!-- Handlebar post -->
+      <line x1="318" y1="115" x2="322" y2="85" stroke="#0a0a0a" stroke-width="8" stroke-linecap="round"/>
+      <!-- Handlebar -->
+      <line x1="300" y1="82" x2="344" y2="88" stroke="#0a0a0a" stroke-width="6" stroke-linecap="round"/>
+      <!-- Seat post -->
+      <line x1="240" y1="120" x2="238" y2="85" stroke="#0a0a0a" stroke-width="8" stroke-linecap="round"/>
+      <!-- Saddle -->
+      <path d="M218 82 Q238 72 258 78" stroke="#0a0a0a" stroke-width="7" stroke-linecap="round"/>
+      <!-- Pedal crank -->
+      <circle cx="255" cy="195" r="14" fill="var(--sand)" stroke="#0a0a0a" stroke-width="5"/>
+      <line x1="255" y1="181" x2="255" y2="209" stroke="#0a0a0a" stroke-width="5"/>
+      <line x1="242" y1="185" x2="268" y2="205" stroke="#0a0a0a" stroke-width="5" stroke-linecap="round"/>
+    </svg>
+    <span class="hero-tag">VELO · EST. 2008</span>
+  </div>
+</section>
+ 
+<!-- Models -->
+<section id="models">
+  <div class="models-header">
+    <div>
+      <p class="section-label">Our Range</p>
+      <h2 class="section-title reveal">Three bikes.<br>One obsession.</h2>
+    </div>
+    <p style="max-width:280px; color:#888; font-size:0.88rem; font-weight:300; line-height:1.7" class="reveal">
+      Every model starts with the same question: what does this rider need to feel completely alive on two wheels?
+    </p>
+  </div>
+  <div class="models-grid">
+    <!-- Road -->
+    <div class="model-card reveal">
+      <span class="model-tag">Road</span>
+      <svg class="model-icon" viewBox="0 0 220 120" fill="none">
+        <g class="bike-wheel" style="--cx:40;--cy:80">
+          <circle cx="40" cy="80" r="34" stroke="#c84b2f" stroke-width="4"/>
+          <circle cx="40" cy="80" r="4" fill="#fff"/>
+          <line x1="40" y1="46" x2="40" y2="114" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="6" y1="80" x2="74" y2="80" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="16" y1="56" x2="64" y2="104" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="64" y1="56" x2="16" y2="104" stroke="#c84b2f" stroke-width="1.5"/>
+        </g>
+        <g class="bike-wheel">
+          <circle cx="180" cy="80" r="34" stroke="#c84b2f" stroke-width="4"/>
+          <circle cx="180" cy="80" r="4" fill="#fff"/>
+          <line x1="180" y1="46" x2="180" y2="114" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="146" y1="80" x2="214" y2="80" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="156" y1="56" x2="204" y2="104" stroke="#c84b2f" stroke-width="1.5"/>
+          <line x1="204" y1="56" x2="156" y2="104" stroke="#c84b2f" stroke-width="1.5"/>
+        </g>
+        <line x1="40" y1="80" x2="108" y2="58" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="40" y1="80" x2="92" y2="34" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="92" y1="34" x2="145" y2="32" stroke="#c84b2f" stroke-width="4" stroke-linecap="round"/>
+        <line x1="145" y1="32" x2="108" y2="58" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+        <line x1="108" y1="58" x2="92" y2="34" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="145" y1="32" x2="180" y2="80" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="150" y1="28" x2="154" y2="14" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="138" y1="12" x2="162" y2="16" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="88" y1="34" x2="86" y2="18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="78" y1="16" x2="96" y2="18" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="108" cy="58" r="6" fill="#111" stroke="#fff" stroke-width="2"/>
+      </svg>
+      <p class="model-name">AERO R1</p>
+      <p class="model-desc">Wind-tunnel refined geometry for pure speed. T700 carbon lay-up, internal cable routing, and race-proven aerodynamics.</p>
+      <p class="model-price">€ 4,200</p>
+    </div>
+    <!-- Gravel -->
+    <div class="model-card reveal">
+      <span class="model-tag" style="background:#7a7268">Gravel</span>
+      <svg class="model-icon" viewBox="0 0 220 120" fill="none">
+        <g class="bike-wheel">
+          <circle cx="40" cy="80" r="36" stroke="#7a7268" stroke-width="5"/>
+          <circle cx="40" cy="80" r="4" fill="#fff"/>
+          <line x1="40" y1="44" x2="40" y2="116" stroke="#7a7268" stroke-width="2"/>
+          <line x1="4" y1="80" x2="76" y2="80" stroke="#7a7268" stroke-width="2"/>
+          <line x1="15" y1="55" x2="65" y2="105" stroke="#7a7268" stroke-width="2"/>
+          <line x1="65" y1="55" x2="15" y2="105" stroke="#7a7268" stroke-width="2"/>
+        </g>
+        <g class="bike-wheel">
+          <circle cx="180" cy="80" r="36" stroke="#7a7268" stroke-width="5"/>
+          <circle cx="180" cy="80" r="4" fill="#fff"/>
+          <line x1="180" y1="44" x2="180" y2="116" stroke="#7a7268" stroke-width="2"/>
+          <line x1="144" y1="80" x2="216" y2="80" stroke="#7a7268" stroke-width="2"/>
+          <line x1="155" y1="55" x2="205" y2="105" stroke="#7a7268" stroke-width="2"/>
+          <line x1="205" y1="55" x2="155" y2="105" stroke="#7a7268" stroke-width="2"/>
+        </g>
+        <line x1="40" y1="80" x2="108" y2="60" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+        <line x1="40" y1="80" x2="90" y2="30" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="90" y1="30" x2="148" y2="28" stroke="#7a7268" stroke-width="5" stroke-linecap="round"/>
+        <line x1="148" y1="28" x2="108" y2="60" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/>
+        <line x1="108" y1="60" x2="90" y2="30" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+        <line x1="148" y1="28" x2="180" y2="80" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="108" cy="60" r="7" fill="#111" stroke="#fff" stroke-width="2.5"/>
+        <line x1="148" y1="24" x2="152" y2="10" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="136" y1="9" x2="160" y2="12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="87" y1="30" x2="85" y2="14" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="76" y1="13" x2="96" y2="15" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <p class="model-name">TERRA G2</p>
+      <p class="model-desc">Adventure without limits. Relaxed geometry, 42mm tyre clearance, and a carbon fork that absorbs everything the trail throws at you.</p>
+      <p class="model-price">€ 3,100</p>
+    </div>
+    <!-- Urban -->
+    <div class="model-card reveal">
+      <span class="model-tag" style="background:#2a4a6b">Urban</span>
+      <svg class="model-icon" viewBox="0 0 220 120" fill="none">
+        <g class="bike-wheel">
+          <circle cx="44" cy="80" r="32" stroke="#4a8abf" stroke-width="4.5"/>
+          <circle cx="44" cy="80" r="4" fill="#fff"/>
+          <line x1="44" y1="48" x2="44" y2="112" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="12" y1="80" x2="76" y2="80" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="21" y1="57" x2="67" y2="103" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="67" y1="57" x2="21" y2="103" stroke="#4a8abf" stroke-width="1.8"/>
+        </g>
+        <g class="bike-wheel">
+          <circle cx="176" cy="80" r="32" stroke="#4a8abf" stroke-width="4.5"/>
+          <circle cx="176" cy="80" r="4" fill="#fff"/>
+          <line x1="176" y1="48" x2="176" y2="112" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="144" y1="80" x2="208" y2="80" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="153" y1="57" x2="199" y2="103" stroke="#4a8abf" stroke-width="1.8"/>
+          <line x1="199" y1="57" x2="153" y2="103" stroke="#4a8abf" stroke-width="1.8"/>
+        </g>
+        <line x1="44" y1="80" x2="108" y2="55" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+        <line x1="44" y1="80" x2="95" y2="33" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="95" y1="33" x2="142" y2="31" stroke="#4a8abf" stroke-width="4.5" stroke-linecap="round"/>
+        <line x1="142" y1="31" x2="108" y2="55" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+        <line x1="108" y1="55" x2="95" y2="33" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <line x1="142" y1="31" x2="176" y2="80" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="108" cy="55" r="6" fill="#111" stroke="#fff" stroke-width="2"/>
+        <line x1="142" y1="27" x2="145" y2="14" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="132" y1="12" x2="154" y2="15" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="93" y1="33" x2="91" y2="18" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="83" y1="16" x2="101" y2="19" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p class="model-name">METRO S3</p>
+      <p class="model-desc">City riding, elevated. Belt drive, integrated lighting, Shimano Nexus 8-speed. Built to last a lifetime in any weather.</p>
+      <p class="model-price">€ 1,850</p>
+    </div>
+  </div>
+</section>
+ 
+<!-- Features -->
+<section id="features">
+  <div class="features-grid">
+    <div class="feature-visual reveal">
+      <svg viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Abstract frame detail SVG -->
+        <circle cx="150" cy="150" r="120" stroke="var(--sand)" stroke-width="40"/>
+        <circle cx="150" cy="150" r="80" stroke="#d0c9bc" stroke-width="2"/>
+        <path d="M150 30 L150 270 M30 150 L270 150" stroke="#c84b2f" stroke-width="1.5" opacity="0.4"/>
+        <circle cx="150" cy="150" r="18" fill="var(--rust)" opacity="0.15"/>
+        <circle cx="150" cy="150" r="8" fill="var(--rust)"/>
+        <!-- Spokes detail -->
+        <line x1="150" y1="30" x2="270" y2="150" stroke="#d0c9bc" stroke-width="1" opacity="0.6"/>
+        <line x1="270" y1="150" x2="150" y2="270" stroke="#d0c9bc" stroke-width="1" opacity="0.6"/>
+        <line x1="150" y1="270" x2="30" y2="150" stroke="#d0c9bc" stroke-width="1" opacity="0.6"/>
+        <line x1="30" y1="150" x2="150" y2="30" stroke="#d0c9bc" stroke-width="1" opacity="0.6"/>
+        <text x="150" y="158" text-anchor="middle" font-family="'Bebas Neue', sans-serif" font-size="12" fill="var(--muted)" letter-spacing="3">PRECISION</text>
+      </svg>
+    </div>
+    <div class="feature-list">
+      <p class="section-label reveal">Engineering</p>
+      <h2 class="section-title reveal" style="margin-bottom:2rem">Built different.<br>By design.</h2>
+      <div class="feature-item reveal">
+        <span class="feature-num">01</span>
+        <div>
+          <p class="feature-name">T700 Carbon Monocoque</p>
+          <p class="feature-text">Our proprietary layup uses continuous-fibre carbon sheets oriented for maximum stiffness where you need it and compliance where you don't.</p>
+        </div>
+      </div>
+      <div class="feature-item reveal">
+        <span class="feature-num">02</span>
+        <div>
+          <p class="feature-name">Integrated Cable Routing</p>
+          <p class="feature-text">Every cable and hydraulic line is hidden inside the frame and bar system, reducing drag and protecting components from the elements.</p>
+        </div>
+      </div>
+      <div class="feature-item reveal">
+        <span class="feature-num">03</span>
+        <div>
+          <p class="feature-name">Lifetime Frame Warranty</p>
+          <p class="feature-text">We stand behind every weld and layup. If the frame fails under normal use, we replace it. No questions. No fine print.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+ 
+<!-- Specs -->
+<section id="specs">
+  <p class="section-label reveal">Technical</p>
+  <h2 class="section-title reveal">Aero R1<br>specifications</h2>
+  <table class="specs-table reveal">
+    <tr><td>Frame</td><td>T700 Carbon Monocoque, internal routing</td></tr>
+    <tr><td>Fork</td><td>Full carbon, 1-1/8" to 1-1/2" tapered steerer</td></tr>
+    <tr><td>Groupset</td><td>Shimano Ultegra Di2 R8150 12-speed</td></tr>
+    <tr><td>Brakes</td><td>Shimano hydraulic disc, 160/160mm rotors</td></tr>
+    <tr><td>Wheelset</td><td>VELO Carbon 50mm tubeless-ready</td></tr>
+    <tr><td>Tyres</td><td>Continental GP5000 S TR 28c</td></tr>
+    <tr><td>Handlebar</td><td>VELO Aero Carbon, internal clamp</td></tr>
+    <tr><td>Saddle</td><td>Fizik Antares R3 Adaptive</td></tr>
+    <tr><td>Weight</td><td>7.1 kg (size M, without pedals)</td></tr>
+    <tr><td>Sizes</td><td>XS / S / M / L / XL</td></tr>
+  </table>
+</section>
+ 
+<!-- Testimonials -->
+<section id="testimonials">
+  <p class="section-label" style="color:rgba(255,255,255,0.6)">Rider Stories</p>
+  <div id="testimonial-content">
+    <p class="testimonial-quote" id="quote-text">"The R1 doesn't feel like a bike you ride — it feels like an extension of your own body. I've put 12,000km on it and it still gives me chills every morning."</p>
+    <p class="testimonial-author" id="quote-author">— Sofia L., Amateur racer, Barcelona</p>
+  </div>
+  <div class="testimonial-dots" id="dots"></div>
+</section>
+ 
+<!-- CTA -->
+<section id="cta">
+  <p class="section-label reveal">Ready?</p>
+  <h2 class="section-title reveal">YOUR BIKE.<br><span>YOUR RULES.</span></h2>
+  <p class="reveal">Configure your perfect machine. Choose frame, groupset, wheels, and colour. Delivered in 4–6 weeks.</p>
+  <a href="#models" class="btn-primary reveal" style="font-size:0.9rem; padding: 1.1rem 3rem;">Start Building</a>
+</section>
+ 
+<!-- Footer -->
+<footer>
+  <span class="logo">VELO</span>
+  <span>© 2025 VELO Bikes. All rights reserved.</span>
+  <nav>
+    <a href="#">Privacy</a>
+    <a href="#">Returns</a>
+    <a href="#">Contact</a>
+    <a href="#">Instagram</a>
+  </nav>
+</footer>
+ 
+<script>
+  // ── Custom cursor ──
+  const cursor = document.getElementById('cursor');
+  document.addEventListener('mousemove', e => {
+    cursor.style.left = e.clientX + 'px';
+    cursor.style.top  = e.clientY + 'px';
+  });
+  document.querySelectorAll('a, button, .model-card, .feature-item').forEach(el => {
+    el.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+    el.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+  });
+ 
+  // ── Navbar scroll ──
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    navbar.classList.toggle('scrolled', window.scrollY > 60);
+  });
+ 
+  // ── Scroll reveal ──
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+ 
+  // ── Testimonials ──
+  const testimonials = [
+    { q: '"The R1 doesn\'t feel like a bike you ride — it feels like an extension of your own body. I\'ve put 12,000km on it and it still gives me chills every morning."', a: '— Sofia L., Amateur racer, Barcelona' },
+    { q: '"I rode the Terra G2 across three countries. Loaded with 20kg of bags, on roads that barely deserve the name. It never once complained."', a: '— Marcus T., Bikepacker, Oslo' },
+    { q: '"The Metro S3 converted me. I haven\'t driven my car to work in eight months. It just makes every commute feel like an event."', a: '— Priya D., Architect, Amsterdam' },
+  ];
+  let current = 0;
+  const dotsEl = document.getElementById('dots');
+  const quoteText = document.getElementById('quote-text');
+  const quoteAuthor = document.getElementById('quote-author');
+ 
+  testimonials.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  });
+ 
+  function goTo(idx) {
+    current = idx;
+    quoteText.style.opacity = '0';
+    quoteAuthor.style.opacity = '0';
+    setTimeout(() => {
+      quoteText.textContent = testimonials[idx].q;
+      quoteAuthor.textContent = testimonials[idx].a;
+      quoteText.style.opacity = '1';
+      quoteAuthor.style.opacity = '1';
+    }, 300);
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+  }
+ 
+  quoteText.style.transition = 'opacity 0.3s';
+  quoteAuthor.style.transition = 'opacity 0.3s';
+  setInterval(() => goTo((current + 1) % testimonials.length), 5000);
+</script>
+</body>
+</html>
